@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>議事録文字起こし</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">🎙️</span>
+    <div>
+      <div class="brand-name">議事録文字起こし</div>
+      <div class="brand-sub">Microsoft MAI-Transcribe-2 使用</div>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button data-tab="transcribe" class="active">① 文字起こし</button>
+    <button data-tab="history">② 保存した議事録</button>
+    <button data-tab="cost">③ 料金と利用状況</button>
+    <button data-tab="settings">④ 初期設定</button>
+    <button data-tab="guide">？ はじめての方へ</button>
+  </nav>
+</header>
+
+<main>
+  <div id="setup-banner" class="banner warn hidden">
+    まだ初期設定が終わっていません。まず <a href="#" data-goto="guide">「はじめての方へ」</a> を読んでから
+    <a href="#" data-goto="settings">「④ 初期設定」</a> を行ってください。
+  </div>
+  <div id="price-banner" class="banner warn hidden"></div>
+
+  <!-- ===================== 文字起こし ===================== -->
+  <section id="tab-transcribe" class="tab active">
+    <div id="upload-area">
+      <h1>会議の録音を文字にする</h1>
+      <p class="lead">録音ファイルを下の枠に入れて、「文字起こしを始める」を押すだけです。</p>
+
+      <label id="dropzone" class="dropzone" tabindex="0">
+        <input id="file-input" type="file" accept="audio/*,video/*,.m4a,.mp3,.wav,.flac,.mp4,.mov,.aac,.ogg,.webm,.wma" hidden>
+        <div class="dz-icon">📂</div>
+        <div class="dz-main">ここに録音ファイルをドラッグ＆ドロップ</div>
+        <div class="dz-sub">または、ここをクリックしてファイルを選ぶ</div>
+        <div class="dz-formats">対応形式の例：MP3・WAV・M4A（iPhoneのボイスメモ）・MP4（Zoom/Teamsの録画）など</div>
+      </label>
+
+      <div id="file-card" class="card hidden">
+        <div class="file-row">
+          <div>
+            <div class="file-name" id="file-name"></div>
+            <div class="file-meta" id="file-meta"></div>
+          </div>
+          <button class="link" id="file-clear">別のファイルにする</button>
+        </div>
+        <div id="estimate" class="estimate"></div>
+      </div>
+
+      <div class="card">
+        <h2>会議の情報</h2>
+        <div class="grid2">
+          <label>会議名<input id="opt-title" type="text" placeholder="例：第3回 企画会議"></label>
+          <label>開催日<input id="opt-date" type="date"></label>
+        </div>
+
+        <h2 class="mt">文字起こしのオプション</h2>
+        <div class="options">
+          <label class="check">
+            <input id="opt-diar" type="checkbox" checked>
+            <span><b>話者を区別する（話者分離）</b><br>
+            <small>「話者1」「話者2」のように、誰が話したかを分けます。あとで実名に置き換えられます。
+              長い録音では失敗することがあるため、その場合はオフにしてください。</small></span>
+          </label>
+          <label class="check">
+            <input id="opt-clean" type="checkbox" checked>
+            <span><b>「えー」「あのー」などを取り除く（読みやすい文章）</b><br>
+            <small>オフにすると、話した通りにそのまま書き起こします（逐語記録が必要な場合）。</small></span>
+          </label>
+          <label class="field">
+            <span><b>話されている言語</b></span>
+            <select id="opt-lang">
+              <option value="auto">自動で判定する（おすすめ）</option>
+              <option value="ja">日本語に固定する</option>
+              <option value="en">英語に固定する</option>
+            </select>
+            <small>自動判定でうまくいかないときだけ固定してください。日英が混ざる会議は「自動」が向いています。</small>
+          </label>
+          <label class="field">
+            <span><b>専門用語・人名・社名（任意）</b></span>
+            <textarea id="opt-phrases" rows="3" placeholder="1行に1つずつ入力。例：&#10;山田太郎&#10;DX推進室&#10;Azure"></textarea>
+            <small>ここに書いた言葉は聞き取られやすくなります（必ずその通りになるわけではありません）。</small>
+          </label>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="start-btn" class="primary big" disabled>文字起こしを始める</button>
+        <div id="start-hint" class="hint">録音ファイルを選ぶとボタンが押せるようになります</div>
+      </div>
+    </div>
+
+    <div id="progress-area" class="card hidden">
+      <h2>処理中です。このままお待ちください</h2>
+      <ol class="steps" id="steps">
+        <li data-step="upload">ファイルを読み込み中</li>
+        <li data-step="convert">音声を変換中</li>
+        <li data-step="transcribe">MAI-Transcribe-2 で文字起こし中</li>
+        <li data-step="done">完了</li>
+      </ol>
+      <div class="bar"><div id="bar-fill"></div></div>
+      <p id="progress-msg" class="muted"></p>
+      <p class="muted small">※ 処理中はこの画面と、起動したときの黒い画面（ターミナル）を閉じないでください。</p>
+    </div>
+
+    <div id="error-area" class="card error hidden">
+      <h2>うまくいきませんでした</h2>
+      <pre id="error-msg"></pre>
+      <button id="error-back" class="primary">戻る</button>
+    </div>
+  </section>
+
+  <!-- ===================== 議事録の編集 ===================== -->
+  <section id="tab-editor" class="tab">
+    <div class="editor-head">
+      <button class="link" data-goto="history">← 一覧に戻る</button>
+      <div class="save-state" id="save-state"></div>
+    </div>
+    <div class="card cost-card" id="cost-card">
+      <h2 id="cost-title">今回の料金（概算）</h2>
+      <div class="cost-grid">
+        <div><div class="stat-label">今回かかった金額</div><div class="cost-main" id="cost-yen"></div><div class="muted small" id="cost-usd"></div></div>
+        <div><div class="stat-label">文字起こしした長さ</div><div class="cost-sub" id="cost-len"></div><div class="muted small" id="cost-rate"></div></div>
+        <div><div class="stat-label">今月の合計（このアプリ）</div><div class="cost-sub" id="cost-month"></div><div class="muted small" id="cost-budget"></div></div>
+      </div>
+      <p class="muted small">※ 概算です。料金は録音の長さ × 単価で計算しています。正確な請求額は Azure ポータルの「コストの管理と請求」で確認できます（反映まで1日ほどかかります）。</p>
+    </div>
+    <div class="card">
+      <div class="grid2">
+        <label>会議名<input id="ed-title" type="text"></label>
+        <label>開催日<input id="ed-date" type="date"></label>
+      </div>
+      <label>出席者<input id="ed-attendees" type="text" placeholder="例：山田、佐藤、鈴木"></label>
+      <div class="ed-meta" id="ed-meta"></div>
+    </div>
+
+    <div class="card" id="speaker-card">
+      <h2>話者の名前を付ける</h2>
+      <p class="muted small">「話者1」などを実際のお名前に置き換えられます。入力するとすぐ全体に反映されます。</p>
+      <div id="speaker-list" class="speaker-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="row-between">
+        <h2>文字起こし結果</h2>
+        <div class="export">
+          <button id="copy-btn">📋 コピー</button>
+          <button id="dl-txt">テキスト(.txt)</button>
+          <button id="dl-word">Word(.doc)</button>
+          <button id="dl-md">Markdown(.md)</button>
+        </div>
+      </div>
+      <p class="muted small">文章は直接クリックして修正できます。修正は自動で保存されます。</p>
+      <div id="segments" class="segments"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 履歴 ===================== -->
+  <section id="tab-history" class="tab">
+    <h1>保存した議事録</h1>
+    <p class="lead">文字起こしした結果はこのパソコンの中（アプリの <code>data</code> フォルダ）に保存されています。</p>
+    <div id="history-list"></div>
+  </section>
+
+  <!-- ===================== 料金 ===================== -->
+  <section id="tab-cost" class="tab">
+    <h1>料金と利用状況</h1>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-label">今月の利用時間</div><div class="stat-val" id="st-min">-</div></div>
+      <div class="stat"><div class="stat-label">今月の料金（目安）</div><div class="stat-val" id="st-yen">-</div></div>
+      <div class="stat"><div class="stat-label">月の予算</div><div class="stat-val" id="st-budget">-</div></div>
+    </div>
+    <div class="bar budget"><div id="budget-fill"></div></div>
+    <p class="muted small" id="budget-text"></p>
+
+    <div class="card">
+      <h2>料金のしくみ（かんたん説明）</h2>
+      <ul class="plain">
+        <li><b>使った分だけ払う「従量課金」です。</b>月額の基本料金はありません。使わなければ 0 円です。</li>
+        <li><b>料金は「録音の長さ」で決まります。</b>ファイルの大きさや、文字数、話者分離のオン/オフでは変わりません。</li>
+        <li>現在の単価：<b id="price-now"></b>（<span id="price-note"></span>）</li>
+        <li>請求は Microsoft（Azure）から、登録したクレジットカードに<b>米ドル建て→円換算</b>で毎月届きます。このアプリが請求するわけではありません。</li>
+      </ul>
+      <table class="table">
+        <thead><tr><th>録音の長さ</th><th>料金の目安</th></tr></thead>
+        <tbody id="price-table"></tbody>
+      </table>
+      <p class="muted small">※ 為替レート <span id="fx"></span> 円/ドルで計算した目安です（設定で変更できます）。実際の請求額は Azure ポータルの「コストの管理と請求」で確認してください。</p>
+    </div>
+
+    <div class="card">
+      <h2>使いすぎを防ぐために</h2>
+      <ol class="plain">
+        <li>このアプリでは「④ 初期設定」で<b>月の予算</b>を決められます。予算を超えそうになると画面でお知らせします。</li>
+        <li>さらに安心したい場合は、Azure ポータルで<b>予算アラート</b>を設定すると、指定額を超えたときにメールが届きます（「はじめての方へ」の手順7）。</li>
+        <li>もう使わない場合は、Azure ポータルで作成したリソースを削除すれば、それ以降料金は一切かかりません。</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>利用の記録（このアプリで使った分）</h2>
+      <div id="usage-list"></div>
+    </div>
+  </section>
+
+  <!-- ===================== 設定 ===================== -->
+  <section id="tab-settings" class="tab">
+    <h1>初期設定</h1>
+    <p class="lead">Azure で作った「Speech（音声）リソース」の情報を入力します。手順は <a href="#" data-goto="guide">「はじめての方へ」</a> にあります。</p>
+
+    <div class="card">
+      <h2>1. APIキー（合言葉のようなもの）</h2>
+      <p class="muted small">Azure ポータル → 作成したリソース → 「キーとエンドポイント」の <b>キー1</b> をコピーして貼り付けます。</p>
+      <div class="key-now" id="key-now"></div>
+      <input id="set-key" type="password" placeholder="ここに APIキー を貼り付け" autocomplete="off">
+      <label class="check inline"><input type="checkbox" id="show-key"> 入力した文字を表示する</label>
+
+      <h2 class="mt">2. エンドポイント（接続先の住所）</h2>
+      <p class="muted small">同じ画面の「エンドポイント」をコピーして貼り付けます。例：<code>https://あなたのリソース名.cognitiveservices.azure.com/</code></p>
+      <input id="set-endpoint" type="text" placeholder="https://xxxx.cognitiveservices.azure.com/">
+
+      <h2 class="mt">3. リージョン（データセンターの場所）</h2>
+      <p class="muted small">リソースを作るときに選んだ場所です。エンドポイントを入力した場合は参考情報になります。
+        <b>MAI-Transcribe-2 は日本のリージョンでは使えません</b>。日本から一番近いのは「東南アジア（シンガポール）」です。</p>
+      <select id="set-region"></select>
+
+      <div class="actions left">
+        <button id="save-btn" class="primary">保存する</button>
+        <button id="test-btn">接続テスト</button>
+        <span id="set-msg" class="msg"></span>
+      </div>
+      <p class="muted small">「接続テスト」は1秒の無音を送って確認します。料金は約0.003円です。</p>
+    </div>
+
+    <div class="card">
+      <h2>料金・予算の設定</h2>
+      <div class="grid3">
+        <label>単価（米ドル / 1時間）<input id="set-price" type="number" step="0.01" min="0"></label>
+        <label>為替レート（円 / 1ドル）<input id="set-fx" type="number" step="1" min="1"></label>
+        <label>月の予算（円）<input id="set-budget" type="number" step="100" min="0"></label>
+      </div>
+      <p class="muted small">単価は Microsoft が変更することがあります。最新の単価は
+        <a href="https://azure.microsoft.com/ja-jp/pricing/details/speech/" target="_blank" rel="noopener">Azure Speech の料金ページ</a> の「MAI Transcribe-2」の行で確認できます。</p>
+      <div class="actions left"><button id="save-price-btn" class="primary">保存する</button><span id="price-msg" class="msg"></span></div>
+    </div>
+
+    <div class="card">
+      <h2>よく使う専門用語（毎回自動で入力されます）</h2>
+      <textarea id="set-phrases" rows="4" placeholder="1行に1つ。例：社名、部署名、製品名、出席者の名前など"></textarea>
+      <div class="actions left"><button id="save-phr-btn" class="primary">保存する</button><span id="phr-msg" class="msg"></span></div>
+    </div>
+
+    <div class="card">
+      <h2>このパソコンの状態</h2>
+      <p id="conv-state"></p>
+    </div>
+  </section>
+
+  <!-- ===================== ガイド ===================== -->
+  <section id="tab-guide" class="tab guide">
+    <h1>はじめての方へ</h1>
+    <p class="lead">このアプリの仕組みと、最初に一度だけ必要な準備を説明します。所要時間は 20〜30 分ほどです。</p>
+
+    <div class="card">
+      <h2>このアプリの仕組み</h2>
+      <div class="flow">
+        <div class="flow-box">🎙️<br>録音ファイル</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">💻<br>このアプリ<br><small>（あなたのPC）</small></div>
+        <div class="flow-arrow">→<br><small>APIキーで<br>本人確認</small></div>
+        <div class="flow-box">☁️<br>Microsoft Azure<br><small>MAI-Transcribe-2</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">📝<br>議事録<br><small>（PCに保存）</small></div>
+      </div>
+      <ul class="plain">
+        <li><b>文字起こしそのものは Microsoft のクラウド（Azure）で行います。</b>このアプリは「録音を送って、結果を受け取り、見やすく整える」窓口です。</li>
+        <li><b>API（エーピーアイ）</b>とは、アプリが Azure の機能を呼び出すための「窓口」のことです。</li>
+        <li><b>APIキー</b>とは、その窓口を使うための「合言葉（鍵）」です。この鍵で「誰が使ったか」が判断され、<b>その人に料金が請求されます</b>。</li>
+      </ul>
+    </div>
+
+    <div class="card important">
+      <h2>⚠️ APIキーの取り扱いで大切なこと</h2>
+      <ul class="plain">
+        <li><b>APIキーは他人に教えないでください。</b>メール・チャット・共有フォルダに貼らないでください。知られると、あなたの費用で勝手に使われるおそれがあります。</li>
+        <li>このアプリは APIキーを <b>このパソコンの中（<code>config.json</code>）だけ</b>に保存し、外部には Microsoft 以外へ送りません。</li>
+        <li>アプリのフォルダごと人に渡すときは、<b><code>config.json</code> を削除</b>してから渡してください。</li>
+        <li>もしキーが漏れたかもしれないと思ったら、Azure ポータルの「キーとエンドポイント」で <b>「キー1を再生成」</b> を押すと古いキーは使えなくなります。新しいキーをこのアプリに設定し直してください。</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>準備の手順</h2>
+      <ol class="howto">
+        <li>
+          <h3>Microsoft Azure のアカウントを作る</h3>
+          <p><a href="https://azure.microsoft.com/ja-jp/pricing/purchase-options/azure-account" target="_blank" rel="noopener">Azure の無料アカウント作成ページ</a> から登録します。Microsoft アカウント（Outlook などのメールアドレス）、電話番号、クレジットカードが必要です。</p>
+          <p class="muted small">会社や学校で Azure を使っている場合は、勝手に作らず情報システム担当の方に相談してください。既存の契約（サブスクリプション）を使えることがあります。</p>
+        </li>
+        <li>
+          <h3>Azure ポータルにサインインする</h3>
+          <p><a href="https://portal.azure.com/" target="_blank" rel="noopener">https://portal.azure.com/</a> を開いてサインインします。</p>
+        </li>
+        <li>
+          <h3>「Speech（音声）」のリソースを作る</h3>
+          <p>上部の検索欄に「<b>Foundry</b>」または「<b>Speech</b>」と入力し、Microsoft Foundry のリソース（または Speech サービス）の「作成」を押します。
+            <a href="https://portal.azure.com/#create/Microsoft.CognitiveServicesAIFoundry" target="_blank" rel="noopener">直接作成画面を開く</a></p>
+          <table class="table">
+            <tbody>
+              <tr><th>サブスクリプション</th><td>自分の契約を選ぶ</td></tr>
+              <tr><th>リソースグループ</th><td>「新規作成」で、例：<code>minutes-app</code>（入れ物の名前。後で丸ごと削除しやすくなります）</td></tr>
+              <tr><th>リージョン</th><td><b>Southeast Asia（東南アジア）</b>がおすすめ。<br><span class="warn-text">Japan East / Japan West は MAI-Transcribe 非対応なので選ばないでください。</span></td></tr>
+              <tr><th>名前</th><td>半角英数字で自由に。例：<code>minutes-yamada</code></td></tr>
+              <tr><th>価格レベル</th><td><b>Standard S0</b>（無料の F0 では MAI-Transcribe が使えません）</td></tr>
+            </tbody>
+          </table>
+          <p>「確認と作成」→「作成」を押し、1〜2分待ちます。</p>
+        </li>
+        <li>
+          <h3>APIキーとエンドポイントをコピーする</h3>
+          <p>作成が終わったら「リソースに移動」→ 左メニューの「<b>キーとエンドポイント</b>」を開きます。<b>キー1</b> と <b>エンドポイント</b> をコピーします。</p>
+        </li>
+        <li>
+          <h3>このアプリに設定する</h3>
+          <p><a href="#" data-goto="settings">「④ 初期設定」</a> に貼り付けて「保存する」→「接続テスト」を押します。「接続できました」と出れば完了です。</p>
+        </li>
+        <li>
+          <h3>試しに短い録音で文字起こしする</h3>
+          <p>スマートフォンで 1 分ほど録音したファイルで試すと安心です（料金は 1 円未満）。</p>
+        </li>
+        <li>
+          <h3>（おすすめ）予算アラートを設定する</h3>
+          <p>Azure ポータルの検索欄で「<b>コストの管理と請求</b>」→「予算」→「追加」で、例えば月 1,000 円を超えたらメールが届くように設定できます。
+            <span class="muted small">※ アラートは通知だけで、自動で止まるわけではありません。</span></p>
+        </li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>知っておいてほしいこと</h2>
+      <ul class="plain">
+        <li><b>録音データの行き先：</b>音声は Microsoft の Azure（選んだリージョン。例：シンガポール）に送られて処理されます。<b>日本国外</b>で処理される点に注意し、社外秘・個人情報を含む会議では、所属組織のルールを確認してください。</li>
+        <li><b>録音ファイルの扱い：</b>このアプリは文字起こしが終わると、パソコン内に一時保存した音声を自動で削除します。元の録音ファイルはそのまま残ります。</li>
+        <li><b>プレビュー版：</b>MAI-Transcribe-2 は現在「プレビュー（試験提供）」です。仕様や料金が変わる可能性があり、品質保証（SLA）はありません。</li>
+        <li><b>上限：</b>1ファイルあたり 500MB 未満・5時間未満まで。話者分離をオンにした場合は、より短い録音までしか処理できません。</li>
+        <li><b>精度：</b>AI による文字起こしには誤りが含まれます。正式な議事録にする前に、必ず人の目で確認・修正してください。</li>
+        <li><b>録音の同意：</b>会議を録音・文字起こしする際は、参加者の了承を得てください。</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>参考リンク（公式）</h2>
+      <ul class="plain">
+        <li><a href="https://microsoft.ai/models/mai-transcribe-2/" target="_blank" rel="noopener">MAI-Transcribe-2 紹介ページ（Microsoft AI）</a></li>
+        <li><a href="https://learn.microsoft.com/ja-jp/azure/ai-services/speech-service/mai-transcribe" target="_blank" rel="noopener">MAI-Transcribe の使い方（Microsoft Learn）</a></li>
+        <li><a href="https://azure.microsoft.com/ja-jp/pricing/details/speech/" target="_blank" rel="noopener">Azure Speech の料金ページ</a></li>
+        <li><a href="https://learn.microsoft.com/ja-jp/azure/ai-services/speech-service/regions?tabs=llmspeech" target="_blank" rel="noopener">対応リージョン一覧</a></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-box">
+    <h2 id="modal-title"></h2>
+    <div id="modal-body"></div>
+    <div class="actions">
+      <button id="modal-cancel">やめる</button>
+      <button id="modal-ok" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
