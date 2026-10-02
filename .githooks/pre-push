@@ -1,0 +1,13 @@
+#!/bin/sh
+# 送信しようとしているコミットをまとめて確認（--no-verify で作られたコミットも捕まえる）
+zero=0000000000000000000000000000000000000000
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$(git hash-object -t tree /dev/null)..$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  "$(git rev-parse --show-toplevel)/.githooks/check-secrets.sh" "$range" || exit 1
+done
+exit 0
